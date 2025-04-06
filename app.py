@@ -23,11 +23,13 @@ st.title("📊 Market Long/Short Dashboard")
 # 📥 Carica dati da Supabase
 try:
     df = load_data()
-    st.write(df)  # 👀 Per debug, rimuovi se non necessario
 
     if df.empty or "asset_name" not in df.columns:
         st.error("⚠️ Nessun dato valido trovato. Controlla che Supabase abbia la colonna `asset_name`.")
         st.stop()
+
+    # 📆 Conversione timestamp
+    df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
 
     asset_names = df["asset_name"].dropna().unique()
     asset = st.selectbox("Seleziona asset:", sorted(asset_names))
@@ -43,7 +45,8 @@ try:
     date_range = st.date_input("Filtra per data", [min_date, max_date])
 
     if len(date_range) == 2:
-        start_date, end_date = pd.to_datetime(date_range[0]), pd.to_datetime(date_range[1])
+        start_date = pd.to_datetime(date_range[0])
+        end_date = pd.to_datetime(date_range[1])
         filtered = filtered[(filtered["timestamp"] >= start_date) & (filtered["timestamp"] <= end_date)]
 
     if filtered.empty:
@@ -85,7 +88,7 @@ try:
     # 📤 Download CSV
     st.markdown("### 📥 Scarica i dati")
     csv = filtered.drop(columns=["buy_MA_24", "buy_MA_120"]).copy()
-    csv["timestamp"] = csv["timestamp"].dt.strftime('%Y-%m-%d %H:%M:%S')  # senza fuso
+    csv["timestamp"] = csv["timestamp"].dt.strftime('%Y-%m-%d %H:%M:%S')
     st.download_button("📄 Scarica CSV", csv.to_csv(index=False).encode('utf-8'), file_name=f"{asset}_dati.csv", mime='text/csv')
 
 except Exception as e:
