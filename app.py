@@ -20,7 +20,6 @@ if not check_login():
 
 st.title("📊 Market Long/Short Dashboard")
 
-# 📥 Carica dati da Supabase
 try:
     df = load_data()
 
@@ -39,14 +38,15 @@ try:
         st.warning("⚠️ Nessun dato disponibile per questo asset.")
         st.stop()
 
-    # ⏳ Intervallo temporale
+    # ⏳ Intervallo temporale (convertito in UTC)
     min_date = filtered["timestamp"].min().date()
     max_date = filtered["timestamp"].max().date()
     date_range = st.date_input("Filtra per data", [min_date, max_date])
 
     if len(date_range) == 2:
-        start_date = pd.to_datetime(date_range[0])
-        end_date = pd.to_datetime(date_range[1])
+        # Convertiamo i date_input in timestamp con timezone UTC
+        start_date = pd.to_datetime(date_range[0]).tz_localize("UTC")
+        end_date = pd.to_datetime(date_range[1]).tz_localize("UTC")
         filtered = filtered[(filtered["timestamp"] >= start_date) & (filtered["timestamp"] <= end_date)]
 
     if filtered.empty:
