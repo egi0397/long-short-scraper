@@ -1,6 +1,7 @@
 streamlit
-plotly
 pandas
-supabase
-beautifulsoup4
+plotly
 requests
+beautifulsoup4
+supabase
+openpyxl
