@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
+import plotly.graph_objects as go
 from supabase_utils import load_data
 
 st.set_page_config(page_title="Market Dashboard", layout="wide")
@@ -21,7 +21,7 @@ st.title("📊 Market Long/Short Dashboard")
 
 try:
     df = load_data()
-    st.write(df)  # 👀 Mostra anteprima
+    st.write(df)
 
     if df.empty or "asset_name" not in df.columns:
         st.error("⚠️ Nessun dato valido trovato.")
@@ -46,7 +46,6 @@ try:
         end = pd.to_datetime(date_range[1]).tz_localize("UTC")
         filtered = filtered[(filtered["timestamp"] >= start) & (filtered["timestamp"] <= end)]
 
-    # ✅ Check se ci sono dati nel range selezionato
     if filtered.empty:
         st.warning("⚠️ Nessun dato disponibile nell'intervallo selezionato.")
         st.stop()
@@ -54,13 +53,18 @@ try:
     st.metric("Ultimo valore BUY (%)", f'{filtered.iloc[0]["buy"]:.2f}')
     st.metric("Ultimo valore SELL (%)", f'{filtered.iloc[0]["sell"]:.2f}')
 
-    # 📊 Grafico con medie mobili
+    # 📊 Medie mobili
     filtered["buy_MA_24"] = filtered["buy"].rolling(window=24).mean()
     filtered["buy_MA_120"] = filtered["buy"].rolling(window=120).mean()
 
-    fig = px.line(filtered, x="timestamp", y=["buy", "sell"], title=f"BUY vs SELL – {asset}")
-    fig.add_scatter(x=filtered["timestamp"], y=filtered["buy_MA_24"], mode="lines", name="MA 24", line=dict(color="orange"))
-    fig.add_scatter(x=filtered["timestamp"], y=filtered["buy_MA_120"], mode="lines", name="MA 120", line=dict(color="blue"))
+    # 📈 Grafico personalizzato con colori
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=filtered["timestamp"], y=filtered["buy"], mode="lines", name="BUY", line=dict(color="green")))
+    fig.add_trace(go.Scatter(x=filtered["timestamp"], y=filtered["sell"], mode="lines", name="SELL", line=dict(color="red")))
+    fig.add_trace(go.Scatter(x=filtered["timestamp"], y=filtered["buy_MA_24"], mode="lines", name="MA 24", line=dict(color="orange", dash="dot")))
+    fig.add_trace(go.Scatter(x=filtered["timestamp"], y=filtered["buy_MA_120"], mode="lines", name="MA 120", line=dict(color="blue", dash="dot")))
+    fig.update_layout(title=f"Trend BUY vs SELL – {asset}", xaxis_title="Timestamp", yaxis_title="%")
+
     st.plotly_chart(fig, use_container_width=True)
 
     # 📤 Esportazione
