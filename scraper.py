@@ -5,7 +5,7 @@ from supabase import create_client, Client
 
 # 🔐 Supabase credentials
 SUPABASE_URL = "https://wqkmdfgklgiczdqptidb.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxa21kZmdrbGdpY3pkcXB0aWRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM4NTEyNzgsImV4cCI6MjA1OTQyNzI3OH0.kHivXh-aErNsO-ktxwYf4hPl8Cl6leDNwGWzqG7xQ-g"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 
 TABLE_NAME = "tracked_values"
 
@@ -13,6 +13,7 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # 🧠 Asset list
 ASSETS = [
+    # Currencies (24x5)
     {"name": "EUR/USD", "url": "https://www.ig.com/uk/forex/markets-forex/eur-usd", "group": "forex"},
     {"name": "GBP/USD", "url": "https://www.ig.com/uk/forex/markets-forex/gbp-usd", "group": "forex"},
     {"name": "USD/JPY", "url": "https://www.ig.com/uk/forex/markets-forex/usd-jpy", "group": "forex"},
@@ -20,6 +21,17 @@ ASSETS = [
     {"name": "Gold", "url": "https://www.ig.com/uk/commodities/markets-commodities/gold", "group": "forex"},
     {"name": "Crude Oil", "url": "https://www.ig.com/uk/commodities/markets-commodities/us-light-crude", "group": "forex"},
 
+    # 🆕 New currencies
+    {"name": "USD/CAD", "url": "https://www.ig.com/uk/forex/markets-forex/usd-cad", "group": "forex"},
+    {"name": "GBP/JPY", "url": "https://www.ig.com/uk/forex/markets-forex/gbp-jpy", "group": "forex"},
+    {"name": "EUR/AUD", "url": "https://www.ig.com/uk/forex/markets-forex/eur-aud", "group": "forex"},
+    {"name": "AUD/USD", "url": "https://www.ig.com/uk/forex/markets-forex/aud-usd", "group": "forex"},
+    {"name": "NZD/USD", "url": "https://www.ig.com/uk/forex/markets-forex/nzd-usd", "group": "forex"},
+    {"name": "AUD/NZD", "url": "https://www.ig.com/uk/forex/markets-forex/aud-nzd", "group": "forex"},
+    {"name": "EUR/GBP", "url": "https://www.ig.com/uk/forex/markets-forex/eur-gbp", "group": "forex"},
+    {"name": "USD/CHF", "url": "https://www.ig.com/uk/forex/markets-forex/usd-chf", "group": "forex"},
+
+    # Indices
     {"name": "FTSE 100", "url": "https://www.ig.com/uk/indices/markets-indices/ftse-100", "group": "uk"},
     {"name": "Germany 40", "url": "https://www.ig.com/uk/indices/markets-indices/germany-40", "group": "germany"},
     {"name": "EU Stocks 50", "url": "https://www.ig.com/uk/indices/markets-indices/eu-stocks-50", "group": "europe"},
@@ -28,8 +40,9 @@ ASSETS = [
     {"name": "Wall Street", "url": "https://www.ig.com/uk/indices/markets-indices/wall-street", "group": "usa"},
 ]
 
-# ⏰ Market hours in UTC (escluso forex)
+# ⏰ Market hours in UTC
 MARKET_HOURS = {
+    "forex":     (time(21, 0), time(20, 59)),  # Sunday 22:00 to Friday 22:00 UK time == 21:00 UTC to 20:59 UTC
     "uk":        (time(8, 0), time(16, 30)),
     "germany":   (time(8, 0), time(16, 30)),
     "europe":    (time(8, 0), time(16, 30)),
@@ -39,22 +52,13 @@ MARKET_HOURS = {
 }
 
 def is_market_open(group: str) -> bool:
-    now = datetime.utcnow()
-    weekday = now.weekday()  # Monday = 0, Sunday = 6
-
-    if group == "forex":
-        # Domenica 21:00 UTC a Venerdì 21:00 UTC (22:00 UK)
-        if (weekday == 6 and now.time() >= time(21, 0)) or \
-           (0 <= weekday <= 3) or \
-           (weekday == 4 and now.time() <= time(21, 0)):
-            return True
-        else:
-            return False
-    else:
-        start, end = MARKET_HOURS.get(group, (None, None))
-        if start and end:
-            return start <= now.time() <= end
-        return False
+    now = datetime.utcnow().time()
+    start, end = MARKET_HOURS.get(group, (None, None))
+    if start and end:
+        if group == "forex":
+            return True  # Always open during weekday (checked by workflow schedule)
+        return start <= now <= end
+    return False
 
 def extract_buy_percentage(url: str) -> float:
     response = requests.get(url)
