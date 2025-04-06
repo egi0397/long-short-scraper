@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from supabase_utils import load_data
+from datetime import datetime
 
 st.set_page_config(page_title="Market Dashboard", layout="wide")
 
@@ -21,20 +22,36 @@ st.title("📊 Market Long/Short Dashboard")
 
 try:
     df = load_data()
-    st.write(df)
-
     if df.empty or "asset_name" not in df.columns:
-        st.warning("⚠️ Nessun dato disponibile per visualizzare. Assicurati che Supabase abbia caricato i dati.")
+        st.error("⚠️ Nessun dato valido trovato. Controlla che Supabase abbia la colonna `asset_name` e che contenga dati.")
         st.stop()
+
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
 
     asset_names = df["asset_name"].dropna().unique()
 
-    if len(asset_names) == 0:
-        st.warning("⚠️ Nessun asset disponibile.")
+    asset = st.selectbox("Seleziona asset:", sorted(asset_names))
+
+    # 📅 Selezione intervallo di date
+    min_date = df["timestamp"].min().date()
+    max_date = df["timestamp"].max().date()
+
+    start_date = st.date_input("Data inizio", value=min_date, min_value=min_date, max_value=max_date)
+    end_date = st.date_input("Data fine", value=max_date, min_value=min_date, max_value=max_date)
+
+    if start_date > end_date:
+        st.warning("⚠️ La data di inizio non può essere successiva alla data di fine.")
         st.stop()
 
-    asset = st.selectbox("Seleziona asset:", sorted(asset_names))
-    filtered = df[df["asset_name"] == asset]
+    filtered = df[
+        (df["asset_name"] == asset) &
+        (df["timestamp"].dt.date >= start_date) &
+        (df["timestamp"].dt.date <= end_date)
+    ]
+
+    if filtered.empty:
+        st.warning("⚠️ Nessun dato per l’intervallo selezionato.")
+        st.stop()
 
     st.metric("Ultimo valore BUY (%)", f'{filtered.iloc[-1]["buy"]:.2f}')
     st.metric("Ultimo valore SELL (%)", f'{filtered.iloc[-1]["sell"]:.2f}')
@@ -43,4 +60,4 @@ try:
     st.plotly_chart(fig, use_container_width=True)
 
 except Exception as e:
-    st.error(f"Errore nella dashboard: {e}")
+    st.error(f"❌ Errore nella dashboard: {e}")
