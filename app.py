@@ -36,34 +36,35 @@ try:
     asset = st.selectbox("Seleziona asset:", sorted(asset_names))
     filtered = df[df["asset_name"] == asset].copy()
 
-    # 📅 Filtro per intervallo di date
-    filtered["timestamp"] = pd.to_datetime(filtered["timestamp"])
+    # 📅 Gestione timestamp
+    filtered["timestamp"] = pd.to_datetime(filtered["timestamp"], utc=True)
     min_date = filtered["timestamp"].min().date()
     max_date = filtered["timestamp"].max().date()
     date_range = st.date_input("Intervallo temporale", [min_date, max_date])
 
     if len(date_range) == 2:
-        start, end = pd.to_datetime(date_range[0]), pd.to_datetime(date_range[1])
+        # 👇 Converto date input in UTC datetime
+        start = pd.to_datetime(date_range[0]).tz_localize("UTC")
+        end = pd.to_datetime(date_range[1]).tz_localize("UTC")
         filtered = filtered[(filtered["timestamp"] >= start) & (filtered["timestamp"] <= end)]
 
     st.metric("Ultimo valore BUY (%)", f'{filtered.iloc[0]["buy"]:.2f}')
     st.metric("Ultimo valore SELL (%)", f'{filtered.iloc[0]["sell"]:.2f}')
 
     # 📊 Grafico con medie mobili
-    fig = px.line(filtered.sort_values("timestamp"), x="timestamp", y=["buy", "sell"], title=f"BUY vs SELL – {asset}")
     filtered["buy_MA_24"] = filtered["buy"].rolling(window=24).mean()
     filtered["buy_MA_120"] = filtered["buy"].rolling(window=120).mean()
 
+    fig = px.line(filtered, x="timestamp", y=["buy", "sell"], title=f"BUY vs SELL – {asset}")
     fig.add_scatter(x=filtered["timestamp"], y=filtered["buy_MA_24"], mode="lines", name="MA 24", line=dict(color="orange"))
     fig.add_scatter(x=filtered["timestamp"], y=filtered["buy_MA_120"], mode="lines", name="MA 120", line=dict(color="blue"))
     st.plotly_chart(fig, use_container_width=True)
 
-    # 📤 Download CSV / Excel
+    # 📤 Esportazione
     filtered_export = filtered.copy()
-    filtered_export["timestamp"] = filtered_export["timestamp"].dt.tz_localize(None)  # ← Fix timezone
+    filtered_export["timestamp"] = filtered_export["timestamp"].dt.tz_localize(None)  # ✅ Rimuove il fuso orario
     st.download_button("📄 Scarica CSV", filtered_export.to_csv(index=False), file_name=f"{asset}_data.csv")
 
-    # Per Excel serve openpyxl
     try:
         import io
         output = io.BytesIO()
