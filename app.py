@@ -5,6 +5,7 @@ from supabase_utils import load_data
 
 st.set_page_config(page_title="Market Dashboard", layout="wide")
 
+# 🔐 Login
 def check_login():
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
@@ -19,75 +20,73 @@ if not check_login():
 
 st.title("📊 Market Long/Short Dashboard")
 
+# 📥 Carica dati da Supabase
 try:
     df = load_data()
-    st.write(df)
+    st.write(df)  # 👀 Per debug, rimuovi se non necessario
 
     if df.empty or "asset_name" not in df.columns:
-        st.error("⚠️ Nessun dato valido trovato.")
+        st.error("⚠️ Nessun dato valido trovato. Controlla che Supabase abbia la colonna `asset_name`.")
         st.stop()
 
     asset_names = df["asset_name"].dropna().unique()
-
-    if len(asset_names) == 0:
-        st.warning("⚠️ Nessun asset disponibile.")
-        st.stop()
-
     asset = st.selectbox("Seleziona asset:", sorted(asset_names))
     filtered = df[df["asset_name"] == asset].copy()
 
-    filtered["timestamp"] = pd.to_datetime(filtered["timestamp"], utc=True)
+    if filtered.empty:
+        st.warning("⚠️ Nessun dato disponibile per questo asset.")
+        st.stop()
+
+    # ⏳ Intervallo temporale
     min_date = filtered["timestamp"].min().date()
     max_date = filtered["timestamp"].max().date()
-    date_range = st.date_input("Intervallo temporale", [min_date, max_date])
+    date_range = st.date_input("Filtra per data", [min_date, max_date])
 
     if len(date_range) == 2:
-        start = pd.to_datetime(date_range[0]).tz_localize("UTC")
-        end = pd.to_datetime(date_range[1]).tz_localize("UTC")
-        filtered = filtered[(filtered["timestamp"] >= start) & (filtered["timestamp"] <= end)]
+        start_date, end_date = pd.to_datetime(date_range[0]), pd.to_datetime(date_range[1])
+        filtered = filtered[(filtered["timestamp"] >= start_date) & (filtered["timestamp"] <= end_date)]
 
     if filtered.empty:
         st.warning("⚠️ Nessun dato disponibile nell'intervallo selezionato.")
         st.stop()
 
-    st.metric("Ultimo valore BUY (%)", f'{filtered.iloc[0]["buy"]:.2f}')
-    st.metric("Ultimo valore SELL (%)", f'{filtered.iloc[0]["sell"]:.2f}')
-
-    # 📊 Medie mobili
+    # 📈 Medie mobili
     filtered["buy_MA_24"] = filtered["buy"].rolling(window=24).mean()
     filtered["buy_MA_120"] = filtered["buy"].rolling(window=120).mean()
 
-    # 📈 Grafico personalizzato con crosshair
+    # 📊 Grafico
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=filtered["timestamp"], y=filtered["buy"], mode="lines", name="BUY", line=dict(color="green")))
-    fig.add_trace(go.Scatter(x=filtered["timestamp"], y=filtered["sell"], mode="lines", name="SELL", line=dict(color="red")))
-    fig.add_trace(go.Scatter(x=filtered["timestamp"], y=filtered["buy_MA_24"], mode="lines", name="MA 24", line=dict(color="orange", dash="dot")))
-    fig.add_trace(go.Scatter(x=filtered["timestamp"], y=filtered["buy_MA_120"], mode="lines", name="MA 120", line=dict(color="blue", dash="dot")))
+
+    fig.add_trace(go.Scatter(x=filtered["timestamp"], y=filtered["buy"], mode='lines', name='BUY %', line=dict(color='green')))
+    fig.add_trace(go.Scatter(x=filtered["timestamp"], y=filtered["sell"], mode='lines', name='SELL %', line=dict(color='red')))
+    fig.add_trace(go.Scatter(x=filtered["timestamp"], y=filtered["buy_MA_24"], mode='lines', name='MA 24', line=dict(color='orange')))
+    fig.add_trace(go.Scatter(x=filtered["timestamp"], y=filtered["buy_MA_120"], mode='lines', name='MA 120', line=dict(color='blue')))
 
     fig.update_layout(
-        title=f"Trend BUY vs SELL – {asset}",
-        xaxis_title="Timestamp",
+        title=f"Trend BUY/SELL – {asset}",
+        xaxis_title="Orario",
         yaxis_title="Percentuale",
         hovermode="x unified",
-        xaxis=dict(showspikes=True, spikemode='across', spikesnap='cursor', showline=True),
-        yaxis=dict(showspikes=True, spikemode='across', spikesnap='cursor', showline=True),
+        height=500
     )
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # 📤 Esportazione
-    filtered_export = filtered.copy()
-    filtered_export["timestamp"] = filtered_export["timestamp"].dt.tz_localize(None)
-    st.download_button("📄 Scarica CSV", filtered_export.to_csv(index=False), file_name=f"{asset}_data.csv")
+    # 📌 Ultimo valore
+    latest = filtered.iloc[0]
+    st.markdown("### 📌 Ultimo dato disponibile")
+    st.write(f"🕒 Timestamp: `{latest['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}`")
+    st.write(f"🟩 BUY: **{latest['buy']:.2f}%** | 🟥 SELL: **{latest['sell']:.2f}%**")
+    if not pd.isna(latest['buy_MA_24']):
+        st.write(f"🔸 MA 24: {latest['buy_MA_24']:.2f}%")
+    if not pd.isna(latest['buy_MA_120']):
+        st.write(f"🔹 MA 120: {latest['buy_MA_120']:.2f}%")
 
-    try:
-        import io
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine="openpyxl") as writer:
-            filtered_export.to_excel(writer, index=False)
-        st.download_button("📊 Scarica Excel", data=output.getvalue(), file_name=f"{asset}_data.xlsx")
-    except Exception as e:
-        st.warning(f"⚠️ Errore esportazione Excel: {e}")
+    # 📤 Download CSV
+    st.markdown("### 📥 Scarica i dati")
+    csv = filtered.drop(columns=["buy_MA_24", "buy_MA_120"]).copy()
+    csv["timestamp"] = csv["timestamp"].dt.strftime('%Y-%m-%d %H:%M:%S')  # senza fuso
+    st.download_button("📄 Scarica CSV", csv.to_csv(index=False).encode('utf-8'), file_name=f"{asset}_dati.csv", mime='text/csv')
 
 except Exception as e:
     st.error(f"Errore nella dashboard: {e}")
