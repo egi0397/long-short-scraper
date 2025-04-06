@@ -36,17 +36,20 @@ try:
     asset = st.selectbox("Seleziona asset:", sorted(asset_names))
     filtered = df[df["asset_name"] == asset].copy()
 
-    # 📅 Gestione timestamp
     filtered["timestamp"] = pd.to_datetime(filtered["timestamp"], utc=True)
     min_date = filtered["timestamp"].min().date()
     max_date = filtered["timestamp"].max().date()
     date_range = st.date_input("Intervallo temporale", [min_date, max_date])
 
     if len(date_range) == 2:
-        # 👇 Converto date input in UTC datetime
         start = pd.to_datetime(date_range[0]).tz_localize("UTC")
         end = pd.to_datetime(date_range[1]).tz_localize("UTC")
         filtered = filtered[(filtered["timestamp"] >= start) & (filtered["timestamp"] <= end)]
+
+    # ✅ Check se ci sono dati nel range selezionato
+    if filtered.empty:
+        st.warning("⚠️ Nessun dato disponibile nell'intervallo selezionato.")
+        st.stop()
 
     st.metric("Ultimo valore BUY (%)", f'{filtered.iloc[0]["buy"]:.2f}')
     st.metric("Ultimo valore SELL (%)", f'{filtered.iloc[0]["sell"]:.2f}')
@@ -62,7 +65,7 @@ try:
 
     # 📤 Esportazione
     filtered_export = filtered.copy()
-    filtered_export["timestamp"] = filtered_export["timestamp"].dt.tz_localize(None)  # ✅ Rimuove il fuso orario
+    filtered_export["timestamp"] = filtered_export["timestamp"].dt.tz_localize(None)
     st.download_button("📄 Scarica CSV", filtered_export.to_csv(index=False), file_name=f"{asset}_data.csv")
 
     try:
