@@ -57,13 +57,21 @@ try:
     filtered["buy_MA_24"] = filtered["buy"].rolling(window=24).mean()
     filtered["buy_MA_120"] = filtered["buy"].rolling(window=120).mean()
 
-    # 📈 Grafico personalizzato con colori
+    # 📈 Grafico personalizzato con crosshair
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=filtered["timestamp"], y=filtered["buy"], mode="lines", name="BUY", line=dict(color="green")))
     fig.add_trace(go.Scatter(x=filtered["timestamp"], y=filtered["sell"], mode="lines", name="SELL", line=dict(color="red")))
     fig.add_trace(go.Scatter(x=filtered["timestamp"], y=filtered["buy_MA_24"], mode="lines", name="MA 24", line=dict(color="orange", dash="dot")))
     fig.add_trace(go.Scatter(x=filtered["timestamp"], y=filtered["buy_MA_120"], mode="lines", name="MA 120", line=dict(color="blue", dash="dot")))
-    fig.update_layout(title=f"Trend BUY vs SELL – {asset}", xaxis_title="Timestamp", yaxis_title="%")
+
+    fig.update_layout(
+        title=f"Trend BUY vs SELL – {asset}",
+        xaxis_title="Timestamp",
+        yaxis_title="Percentuale",
+        hovermode="x unified",
+        xaxis=dict(showspikes=True, spikemode='across', spikesnap='cursor', showline=True),
+        yaxis=dict(showspikes=True, spikemode='across', spikesnap='cursor', showline=True),
+    )
 
     st.plotly_chart(fig, use_container_width=True)
 
