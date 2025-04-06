@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
+import plotly.express as px
 from supabase_utils import load_data
 
 st.set_page_config(page_title="Market Dashboard", layout="wide")
@@ -21,51 +21,50 @@ st.title("📊 Market Long/Short Dashboard")
 
 try:
     df = load_data()
-    st.write(df)  # 👀 Mostra il contenuto del DataFrame nella dashboard
+    st.write("✅ Dati caricati con successo")
 
     if df.empty or "asset_name" not in df.columns:
-        st.error("⚠️ Nessun dato valido trovato. Controlla che Supabase abbia la colonna `asset_name` e che contenga dati.")
+        st.warning("⚠️ Nessun dato disponibile.")
         st.stop()
 
-    asset_names = df["asset_name"].dropna().unique()
-
-    if len(asset_names) == 0:
-        st.warning("⚠️ Nessun asset disponibile.")
-        st.stop()
-
-    asset = st.selectbox("Seleziona asset:", sorted(asset_names))
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    asset = st.selectbox("Seleziona asset:", sorted(df["asset_name"].dropna().unique()))
     filtered = df[df["asset_name"] == asset].sort_values("timestamp", ascending=True)
 
-    st.metric("Ultimo valore BUY (%)", f'{filtered.iloc[-1]["buy"]:.2f}')
-    st.metric("Ultimo valore SELL (%)", f'{filtered.iloc[-1]["sell"]:.2f}')
+    # 📅 Filtro intervallo temporale
+    min_date = filtered["timestamp"].min()
+    max_date = filtered["timestamp"].max()
+    start_date, end_date = st.slider("Filtra per intervallo di tempo:", min_value=min_date, max_value=max_date, value=(min_date, max_date))
+    filtered = filtered[(filtered["timestamp"] >= start_date) & (filtered["timestamp"] <= end_date)]
 
-    # 📊 Grafico BUY vs SELL con colori personalizzati
-    line_chart = go.Figure()
+    # ➕ Medie mobili
+    filtered["SMA_24"] = filtered["buy"].rolling(window=24).mean()
+    filtered["SMA_120"] = filtered["buy"].rolling(window=120).mean()
 
-    line_chart.add_trace(go.Scatter(
-        x=filtered["timestamp"],
-        y=filtered["buy"],
-        mode="lines+markers",
-        name="BUY",
-        line=dict(color="green")
-    ))
+    # ➕ Variazione percentuale BUY
+    filtered["buy_change_%"] = filtered["buy"].pct_change() * 100
 
-    line_chart.add_trace(go.Scatter(
-        x=filtered["timestamp"],
-        y=filtered["sell"],
-        mode="lines+markers",
-        name="SELL",
-        line=dict(color="red")
-    ))
+    # 📈 Line chart BUY + SELL + SMA
+    fig = px.line()
+    fig.add_scatter(x=filtered["timestamp"], y=filtered["buy"], mode="lines", name="BUY", line=dict(color="green"))
+    fig.add_scatter(x=filtered["timestamp"], y=filtered["sell"], mode="lines", name="SELL", line=dict(color="red"))
+    fig.add_scatter(x=filtered["timestamp"], y=filtered["SMA_24"], mode="lines", name="SMA 24", line=dict(color="orange", dash="dot"))
+    fig.add_scatter(x=filtered["timestamp"], y=filtered["SMA_120"], mode="lines", name="SMA 120", line=dict(color="blue", dash="dot"))
+    fig.update_layout(title=f"Trend BUY/SELL – {asset}", xaxis_title="Data", yaxis_title="%")
 
-    line_chart.update_layout(
-        title=f"Andamento BUY vs SELL – {asset}",
-        xaxis_title="Timestamp",
-        yaxis_title="Percentuale",
-        legend_title="Tipo",
-    )
+    st.plotly_chart(fig, use_container_width=True)
 
-    st.plotly_chart(line_chart, use_container_width=True)
+    # 📤 Esporta CSV o Excel
+    st.subheader("⬇️ Esporta dati")
+    export_format = st.radio("Scegli formato:", ["CSV", "Excel"])
+    if export_format == "CSV":
+        st.download_button("Scarica CSV", filtered.to_csv(index=False), file_name=f"{asset}_dati.csv", mime="text/csv")
+    else:
+        from io import BytesIO
+        buffer = BytesIO()
+        with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+            filtered.to_excel(writer, index=False, sheet_name='Dati')
+        st.download_button("Scarica Excel", buffer.getvalue(), file_name=f"{asset}_dati.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 except Exception as e:
-    st.error(f"❌ Errore nella dashboard: {e}")
+    st.error(f"Errore nella dashboard: {e}")
