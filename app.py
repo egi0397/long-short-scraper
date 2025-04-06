@@ -2,10 +2,10 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from supabase_utils import load_data
+from io import BytesIO
 
 st.set_page_config(page_title="Market Dashboard", layout="wide")
 
-# 🔐 Login
 def check_login():
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
@@ -18,53 +18,60 @@ def check_login():
 if not check_login():
     st.stop()
 
-# 🚀 Main Title
 st.title("📊 Market Long/Short Dashboard")
 
 try:
     df = load_data()
+    st.write(df)  # Mostra il contenuto del DataFrame per debug
 
     if df.empty or "asset_name" not in df.columns:
-        st.warning("⚠️ Nessun dato valido trovato.")
+        st.error("⚠️ Nessun dato valido trovato. Controlla che Supabase abbia la colonna `asset_name` e che contenga dati.")
         st.stop()
 
-    # 🕒 Assicura che timestamp sia datetime
-    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    asset_names = df["asset_name"].dropna().unique()
 
-    # 🔍 Asset selection
-    asset = st.selectbox("Seleziona asset:", sorted(df["asset_name"].dropna().unique()))
-    filtered = df[df["asset_name"] == asset].sort_values("timestamp", ascending=True)
+    if len(asset_names) == 0:
+        st.warning("⚠️ Nessun asset disponibile.")
+        st.stop()
 
-    # 📅 Filtro intervallo temporale
-    min_date = filtered["timestamp"].min().date()
-    max_date = filtered["timestamp"].max().date()
-    start_date, end_date = st.date_input("Intervallo di tempo", [min_date, max_date], min_value=min_date, max_value=max_date)
+    asset = st.selectbox("Seleziona asset:", sorted(asset_names))
+    filtered = df[df["asset_name"] == asset].copy()
 
-    filtered = filtered[
-        (filtered["timestamp"].dt.date >= start_date) &
-        (filtered["timestamp"].dt.date <= end_date)
-    ]
+    # Assicura che timestamp sia in formato datetime
+    filtered["timestamp"] = pd.to_datetime(filtered["timestamp"])
+    filtered.sort_values("timestamp", inplace=True)
 
-    # 🧮 Calcolo medie mobili
-    filtered["SMA 24"] = filtered["buy"].rolling(window=24).mean()
-    filtered["SMA 120"] = filtered["buy"].rolling(window=120).mean()
+    # Calcola medie mobili
+    filtered["MA_24"] = filtered["buy"].rolling(window=24).mean()
+    filtered["MA_120"] = filtered["buy"].rolling(window=120).mean()
 
-    # 📈 Grafico BUY vs SELL
-    fig = px.line(filtered, x="timestamp", y=["buy", "sell"], title=f"BUY vs SELL – {asset}")
-    fig.update_traces(selector=dict(name='buy'), line=dict(color='green'))
-    fig.update_traces(selector=dict(name='sell'), line=dict(color='red'))
+    # Ultimo valore
+    st.metric("Ultimo valore BUY (%)", f'{filtered.iloc[-1]["buy"]:.2f}')
+    st.metric("Ultimo valore SELL (%)", f'{filtered.iloc[-1]["sell"]:.2f}')
+
+    # 📈 Grafico con BUY, SELL, MA_24, MA_120
+    fig = px.line(title=f"Trend BUY & SELL – {asset}")
+    fig.add_scatter(x=filtered["timestamp"], y=filtered["buy"], mode="lines", name="BUY", line=dict(color="green"))
+    fig.add_scatter(x=filtered["timestamp"], y=filtered["sell"], mode="lines", name="SELL", line=dict(color="red"))
+    fig.add_scatter(x=filtered["timestamp"], y=filtered["MA_24"], mode="lines", name="MA 24", line=dict(color="blue"))
+    fig.add_scatter(x=filtered["timestamp"], y=filtered["MA_120"], mode="lines", name="MA 120", line=dict(color="orange"))
     st.plotly_chart(fig, use_container_width=True)
 
-    # 📉 Medie mobili
-    fig_ma = px.line(filtered, x="timestamp", y=["buy", "SMA 24", "SMA 120"], title=f"BUY + Medie Mobili – {asset}")
-    fig_ma.update_traces(selector=dict(name='buy'), line=dict(color='green'))
-    fig_ma.update_traces(selector=dict(name='SMA 24'), line=dict(color='orange'))
-    fig_ma.update_traces(selector=dict(name='SMA 120'), line=dict(color='blue'))
-    st.plotly_chart(fig_ma, use_container_width=True)
-
-    # 📤 Export
+    # ⬇️ Download CSV
     st.download_button("⬇️ Scarica CSV", data=filtered.to_csv(index=False), file_name=f"{asset}_data.csv", mime="text/csv")
-    st.download_button("⬇️ Scarica Excel", data=filtered.to_excel(index=False, engine='openpyxl'), file_name=f"{asset}_data.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+    # ⬇️ Download Excel
+    excel_buffer = BytesIO()
+    with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
+        filtered.to_excel(writer, index=False, sheet_name="Dati")
+        writer.save()
+
+    st.download_button(
+        label="⬇️ Scarica Excel",
+        data=excel_buffer.getvalue(),
+        file_name=f"{asset}_data.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 except Exception as e:
     st.error(f"Errore nella dashboard: {e}")
