@@ -1,11 +1,11 @@
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime, time
+from datetime import datetime
 from supabase import create_client, Client
-
-# 🔐 Supabase credentials
+import pytz  # <--- questo mancava
 import os
 
+# 🔐 Supabase credentials da GitHub Actions
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
@@ -13,53 +13,43 @@ TABLE_NAME = "tracked_values"
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# 🧠 Asset list
 ASSETS = [
-    # Currencies (24x5)
-    {"name": "EUR/USD", "url": "https://www.ig.com/uk/forex/markets-forex/eur-usd", "group": "forex"},
-    {"name": "GBP/USD", "url": "https://www.ig.com/uk/forex/markets-forex/gbp-usd", "group": "forex"},
-    {"name": "USD/JPY", "url": "https://www.ig.com/uk/forex/markets-forex/usd-jpy", "group": "forex"},
-    {"name": "USD/CNH", "url": "https://www.ig.com/uk/forex/markets-forex/usd-cnh", "group": "forex"},
-    {"name": "Gold", "url": "https://www.ig.com/uk/commodities/markets-commodities/gold", "group": "forex"},
-    {"name": "Crude Oil", "url": "https://www.ig.com/uk/commodities/markets-commodities/us-light-crude", "group": "forex"},
-
-    # 🆕 New currencies
-    {"name": "USD/CAD", "url": "https://www.ig.com/uk/forex/markets-forex/usd-cad", "group": "forex"},
-    {"name": "GBP/JPY", "url": "https://www.ig.com/uk/forex/markets-forex/gbp-jpy", "group": "forex"},
-    {"name": "EUR/AUD", "url": "https://www.ig.com/uk/forex/markets-forex/eur-aud", "group": "forex"},
-    {"name": "AUD/USD", "url": "https://www.ig.com/uk/forex/markets-forex/aud-usd", "group": "forex"},
-    {"name": "NZD/USD", "url": "https://www.ig.com/uk/forex/markets-forex/nzd-usd", "group": "forex"},
-    {"name": "AUD/NZD", "url": "https://www.ig.com/uk/forex/markets-forex/aud-nzd", "group": "forex"},
-    {"name": "EUR/GBP", "url": "https://www.ig.com/uk/forex/markets-forex/eur-gbp", "group": "forex"},
-    {"name": "USD/CHF", "url": "https://www.ig.com/uk/forex/markets-forex/usd-chf", "group": "forex"},
-
-    # Indices
-    {"name": "FTSE 100", "url": "https://www.ig.com/uk/indices/markets-indices/ftse-100", "group": "uk"},
-    {"name": "Germany 40", "url": "https://www.ig.com/uk/indices/markets-indices/germany-40", "group": "germany"},
-    {"name": "EU Stocks 50", "url": "https://www.ig.com/uk/indices/markets-indices/eu-stocks-50", "group": "europe"},
-    {"name": "Japan 225", "url": "https://www.ig.com/uk/indices/markets-indices/japan-225", "group": "tokyo"},
-    {"name": "Hong Kong HS", "url": "https://www.ig.com/uk/indices/markets-indices/hong-kong-hs42", "group": "hongkong"},
-    {"name": "Wall Street", "url": "https://www.ig.com/uk/indices/markets-indices/wall-street", "group": "usa"},
+    {"name": "EUR/USD", "url": "https://www.ig.com/uk/forex/markets-forex/eur-usd"},
+    {"name": "GBP/USD", "url": "https://www.ig.com/uk/forex/markets-forex/gbp-usd"},
+    {"name": "USD/JPY", "url": "https://www.ig.com/uk/forex/markets-forex/usd-jpy"},
+    {"name": "USD/CNH", "url": "https://www.ig.com/uk/forex/markets-forex/usd-cnh"},
+    {"name": "Gold", "url": "https://www.ig.com/uk/commodities/markets-commodities/gold"},
+    {"name": "Crude Oil", "url": "https://www.ig.com/uk/commodities/markets-commodities/us-light-crude"},
+    {"name": "FTSE 100", "url": "https://www.ig.com/uk/indices/markets-indices/ftse-100"},
+    {"name": "Germany 40", "url": "https://www.ig.com/uk/indices/markets-indices/germany-40"},
+    {"name": "EU Stocks 50", "url": "https://www.ig.com/uk/indices/markets-indices/eu-stocks-50"},
+    {"name": "Japan 225", "url": "https://www.ig.com/uk/indices/markets-indices/japan-225"},
+    {"name": "Hong Kong HS", "url": "https://www.ig.com/uk/indices/markets-indices/hong-kong-hs42"},
+    {"name": "Wall Street", "url": "https://www.ig.com/uk/indices/markets-indices/wall-street"},
+    {"name": "USD/CAD", "url": "https://www.ig.com/uk/forex/markets-forex/usd-cad"},
+    {"name": "GBP/JPY", "url": "https://www.ig.com/uk/forex/markets-forex/gbp-jpy"},
+    {"name": "EUR/AUD", "url": "https://www.ig.com/uk/forex/markets-forex/eur-aud"},
+    {"name": "AUD/USD", "url": "https://www.ig.com/uk/forex/markets-forex/aud-usd"},
+    {"name": "NZD/USD", "url": "https://www.ig.com/uk/forex/markets-forex/nzd-usd"},
+    {"name": "AUD/NZD", "url": "https://www.ig.com/uk/forex/markets-forex/aud-nzd"},
+    {"name": "EUR/GBP", "url": "https://www.ig.com/uk/forex/markets-forex/eur-gbp"},
+    {"name": "USD/CHF", "url": "https://www.ig.com/uk/forex/markets-forex/usd-chf"},
 ]
 
-# ⏰ Market hours in UTC
-MARKET_HOURS = {
-    "forex":     (time(21, 0), time(20, 59)),  # Sunday 22:00 to Friday 22:00 UK time == 21:00 UTC to 20:59 UTC
-    "uk":        (time(8, 0), time(16, 30)),
-    "germany":   (time(8, 0), time(16, 30)),
-    "europe":    (time(8, 0), time(16, 30)),
-    "tokyo":     (time(0, 0), time(6, 0)),
-    "hongkong":  (time(1, 30), time(8, 0)),
-    "usa":       (time(13, 30), time(20, 0)),
-}
+def is_market_open_24_5() -> bool:
+    utc_now = datetime.utcnow()
+    london_tz = pytz.timezone("Europe/London")
+    london_now = utc_now.replace(tzinfo=pytz.utc).astimezone(london_tz)
 
-def is_market_open(group: str) -> bool:
-    now = datetime.utcnow().time()
-    start, end = MARKET_HOURS.get(group, (None, None))
-    if start and end:
-        if group == "forex":
-            return True  # Always open during weekday (checked by workflow schedule)
-        return start <= now <= end
+    weekday = london_now.weekday()  # Monday = 0, Sunday = 6
+    hour = london_now.hour
+
+    if weekday == 6 and hour >= 22:
+        return True  # Domenica dopo le 22 UK
+    elif weekday in [0, 1, 2, 3]:
+        return True  # Da lunedì a giovedì
+    elif weekday == 4 and hour < 22:
+        return True  # Venerdì prima delle 22 UK
     return False
 
 def extract_buy_percentage(url: str) -> float:
@@ -89,17 +79,13 @@ def log_to_supabase(name: str, buy: float):
     else:
         print(f"❌ Supabase error inserting {name}: {res}")
 
-# 🚀 MAIN LOOP
-for asset in ASSETS:
-    name = asset["name"]
-    url = asset["url"]
-    group = asset["group"]
-
-    try:
-        if is_market_open(group):
-            buy = extract_buy_percentage(url)
-            log_to_supabase(name, buy)
-        else:
-            print(f"⏳ Market closed for {name} — skipped.")
-    except Exception as e:
-        print(f"❌ Error scraping {name}: {e}")
+# MAIN
+if is_market_open_24_5():
+    for asset in ASSETS:
+        try:
+            buy = extract_buy_percentage(asset["url"])
+            log_to_supabase(asset["name"], buy)
+        except Exception as e:
+            print(f"❌ Error scraping {asset['name']}: {e}")
+else:
+    print("⏳ Market closed (outside 24/5 range) — skipping all assets.")
