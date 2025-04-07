@@ -2,15 +2,13 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 from supabase import create_client, Client
-import pytz  # <--- questo mancava
-import os
+import pytz
 
-# 🔐 Supabase credentials da GitHub Actions
-SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+# 🔐 Supabase credentials
+SUPABASE_URL = "https://wqkmdfgklgiczdqptidb.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxa21kZmdrbGdpY3pkcXB0aWRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM4NTEyNzgsImV4cCI6MjA1OTQyNzI3OH0.kHivXh-aErNsO-ktxwYf4hPl8Cl6leDNwGWzqG7xQ-g"
 
 TABLE_NAME = "tracked_values"
-
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 ASSETS = [
@@ -81,6 +79,7 @@ def log_to_supabase(name: str, buy: float):
 
 # MAIN
 if is_market_open_24_5():
+    print("✅ Market open – starting scraping...")
     for asset in ASSETS:
         try:
             buy = extract_buy_percentage(asset["url"])
