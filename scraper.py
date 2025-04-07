@@ -4,8 +4,10 @@ from datetime import datetime, time
 from supabase import create_client, Client
 
 # 🔐 Supabase credentials
-SUPABASE_URL = "https://wqkmdfgklgiczdqptidb.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+import os
+
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
 TABLE_NAME = "tracked_values"
 
